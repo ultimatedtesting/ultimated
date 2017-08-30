@@ -1,0 +1,11 @@
+#!/bin/bash
+
+RELEASE_NODE_SUITE=`cat ~/.ultimated/packages/ultimated-core/latest/release-node-suite`
+
+if [ "$1" = 'jenkins' ]; then
+    echo "Ultimated running in jenkins/headless mode"
+    xvfb-run -a  ~/.ultimated/packages/node-suites/$RELEASE_NODE_SUITE/bin/node ~/.ultimated/packages/ultimated-core/latest/main.js "$@"
+else
+    echo "Ultimated running in normal mode"
+     ~/.ultimated/packages/node-suites/$RELEASE_NODE_SUITE/bin/node ~/.ultimated/packages/ultimated-core/latest/main.js "$@"
+fi

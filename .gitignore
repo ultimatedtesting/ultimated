@@ -1,0 +1,8 @@
+node_modules
+npm-debug*
+.idea
+.DS_Store
+*.png
+reports
+logs
+*.tar.gz
