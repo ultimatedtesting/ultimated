@@ -13,8 +13,8 @@ Start testing hybrid mobile apps on real devices within minutes!
 ## Requirements
 Supported machine systems:
 - [x] Linux Ubuntu 14
-- [ ] ~~Linux Ubuntu 16~~ (coming soon)
-- [ ] ~~Linux Debian~~ (coming soon)
+- [x] Linux Ubuntu 16 (coming soon)
+- [x] Linux Debian (coming soon)
 - [ ] ~~macOS~~ (coming soon)
 - [ ] ~~Windows~~ (coming after release 1.0.0)
 
