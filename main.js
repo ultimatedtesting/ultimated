@@ -9,7 +9,6 @@ if (fs.existsSync('./.ultimated/release-version')) {
     shelljs.exec(`ln -s ~/.ultimated/packages/node-suites/${nodeSuiteVersion}/lib/node_modules "./.ultimated/node_modules"`, {silent: true});
 }
 
-
 require('babel-register')({
     "presets": ["es2015", "es2016", "stage-2"]
 });
@@ -18,6 +17,7 @@ require('babel-polyfill');
 
 var versionManager = require('./framework/versionManager').default;
 var commonUtils = require('./framework/commonUtils').default;
+var config = require('./config/config').default;
 // set project relative path
 global.Ultimated = {
     VAULT: {
@@ -25,10 +25,25 @@ global.Ultimated = {
         PROJECT_RELATIVE_PATH: commonUtils.getProjectPathRelativeToFrameworkPath(1),
         FRAMEWORK_RELATIVE_PATH_SHALLOW: commonUtils.getFrameworkPathRelativeToProjectPath(),
         FRAMEWORK_RELATIVE_PATH: commonUtils.getFrameworkPathRelativeToProjectPath(1)
-    }
+    },
+    FLAGS: {}
 };
 
-function executeTests() {
+process.argv.forEach((argv, index) => {
+    if (argv.includes(' ') && argv.includes('--')) {
+        argv.split(' ').forEach((param) => {
+            if (config.SUPPORTED_FLAGS[param]) {
+                Ultimated.FLAGS[config.SUPPORTED_FLAGS[param]] = true;
+            }
+        })
+    }
+
+    if (argv.includes('-branch')) {
+        Ultimated.BRANCH = argv.match(/-branch\s\w+([^\s]+)/g)[0].replace('-branch ', '');
+    }
+});
+
+function executeTests(afterAllCallback) {
     shelljs.exec(`rm -rf ./.ultimated/tests`);
     shelljs.exec(`cp -r tests ./.ultimated`);
     shelljs.exec(`cp config.js ./.ultimated`);
@@ -51,7 +66,7 @@ function executeTests() {
 
     versionManager.informAboutNewerVersion();
 
-    require(`./../${Ultimated.VAULT.PROJECT_VERSION}/framework/main.js`);
+    require(`./../${Ultimated.VAULT.PROJECT_VERSION}/framework/main.js`).default(afterAllCallback);
 }
 
 global.PROJECT_RELATIVE_PATH_SHALLOW = commonUtils.getProjectPathRelativeToFrameworkPath();
@@ -61,27 +76,12 @@ global.FRAMEWORK_RELATIVE_PATH = commonUtils.getFrameworkPathRelativeToProjectPa
 
 //TODO add all ifs to a class, refactor to switch
 
-if (!process.argv[2] && fs.existsSync('./.ultimated/release-version')) { // if ultimated is run with no params
-    executeTests();
-} else if (!process.argv[2] && !fs.existsSync('./.ultimated/release-version')) {
-    console.log('\nThis command can only be run from the project directory\n');
-    console.log('');
-    console.log('Would you like to create a new project? Type:');
-    console.log('  ultimated create project_name\n');
-} else if (process.argv[2] === 'create' && process.argv[3]) { // if ultimated is run with "create"
+if (process.argv[2] === 'create' && process.argv[3]) { // if ultimated is run with "create"
     shelljs.exec(`~/.ultimated/packages/ultimated-core/latest/create.sh create ${process.argv[3]}`);
 } else if (process.argv[2] === 'install' && process.argv[3] === 'android') {
     console.log('If you haven\'t installed Android SDK or Java on your system yet');
     console.log('to do so, type:');
     console.log('  bash <( curl http://ultimatedtesting.com/install/android )');
-} else if (process.argv[2] === 'jenkins' && fs.existsSync('./jenkins.sh') && fs.existsSync('./.ultimated/release-version')) {
-    process.env.JENKINS = true;
-    console.log('Executing jenkins.sh script...');
-    shelljs.exec(`./jenkins.sh ${process.argv[3]}`);
-    console.log('jenkins.sh script finished. Executing tests...');
-    executeTests();
-} else if (process.argv[2] === 'jenkins' && !fs.existsSync('./jenkins.sh') && fs.existsSync('./.ultimated/release-version')) {
-    console.log('Running Ultimated in jenkins-mode impossible. Please add jenkins.sh to your project');
 } else if (process.argv[2] === 'update' && fs.existsSync('./.ultimated/release-version')) {
     Ultimated.VAULT.FRAMEWORK_LATEST_VERSION = versionManager.getFrameworkLatestVersion();
     console.log('Updating project to version', Ultimated.VAULT.FRAMEWORK_LATEST_VERSION);
@@ -93,6 +93,36 @@ if (!process.argv[2] && fs.existsSync('./.ultimated/release-version')) { // if u
     console.log('Project updated. To run the project, type');
     console.log('  ultimated');
     console.log('');
+} else if (fs.existsSync('./.ultimated/release-version')) {
+    if (Ultimated.FLAGS.BEFORE_ALL && fs.existsSync('./beforeAll.sh')) {
+        console.log('Executing beforeAll.sh script...');
+        shelljs.exec(`./beforeAll.sh ${Ultimated.BRANCH}`);
+    } else if (Ultimated.FLAGS.BEFORE_ALL) {
+        console.log('You used --beforeAll flag, but the beforeAll.sh file is missing');
+    }
+
+    if (Ultimated.FLAGS.AFTER_ALL && fs.existsSync('./afterAll.sh')) {
+        executeTests((beginDateTime, deviceId, port) => {
+            const reportsDir = `reports/${beginDateTime}`;
+            const logsDir = `logs/${beginDateTime}-${port}`;
+
+            if (fs.existsSync('./afterAll.sh')) {
+                console.log('Executing afterAll.sh script...');
+                // TODO give arguments here as variables e.g "BRANCH=branch_name LOGS_DIR=logs_dir bash afterAll.sh"
+                shelljs.exec(`./afterAll.sh ${reportsDir} ${logsDir} ${Ultimated.BRANCH} ${beginDateTime} ${deviceId}`);
+            }
+        });
+    }  else if (Ultimated.FLAGS.AFTER_ALL) {
+        console.log('You used --afterAll flag, but the afterAll.sh file is missing');
+        executeTests();
+    } else {
+        executeTests();
+    }
+} else if (!fs.existsSync('./.ultimated/release-version')) { // TODO and if second argument given is not a flag
+    console.log('\nThis command can only be run from the project directory\n');
+    console.log('');
+    console.log('Would you like to create a new project? Type:');
+    console.log('  ultimated create project_name\n');
 } else {
     console.log('Ultimated: command unknown');
 }

@@ -24,7 +24,8 @@ const SuiteManagerClass = class {
 
         this.serverConfig = {
             host: '127.0.0.1',
-            port: process.env.PORT
+            port: process.env.PORT,
+            protocol: 'http'
         };
 
         this.capsConfig = {
@@ -36,6 +37,7 @@ const SuiteManagerClass = class {
             fullReset: false,
             automationName: process.env.PLATFORM === 'Android' ? "Appium" : "XCUITest",
             nativeWebScreenshot: false,
+            androidInstallTimeout: 240000
             // unicodeKeyboard: true,
             // resetKeyboard: true
         };
@@ -85,6 +87,9 @@ const SuiteManagerClass = class {
             if (Framework.PLATFORM === Framework.ANDROID) {
                 Framework.SCREEN_HEIGHT = (await driver.execute('return window.screen')).height;
                 Framework.SCREEN_WIDTH = (await driver.execute('return window.screen')).width;
+                Framework.SCREEN_RATIO = (await driver.execute('return window.devicePixelRatio'));
+                Framework.SCREEN_RESOLUTION_HEIGHT = Framework.SCREEN_HEIGHT * Framework.SCREEN_RATIO;
+                Framework.SCREEN_RESOLUTION_WIDTH = Framework.SCREEN_WIDTH * Framework.SCREEN_RATIO;
             }
 
             this.exposeDriver(driver);
@@ -193,11 +198,11 @@ const SuiteManagerClass = class {
                 if (selector.includes('//')) {
                     return this
                         .waitForElementByXPath(selector, timeout)
-                        .elementsByXPath(selector, timeout);
+                        .elementsByXPath(selector);
                 } else {
                     return this
                         .waitForElementByCssSelector(selector, timeout)
-                        .elementsByCssSelector(selector, 0);
+                        .elementsByCssSelector(selector);
                 }
             }
         );
@@ -226,11 +231,11 @@ const SuiteManagerClass = class {
 
         webDriverInstance.addPromiseChainMethod(
             'isElement',
-            function(selector, timeout = CONFIG.DEFAULT_WAIT_TIMEOUT_MS) {
+            function(selector) {
                 if (selector.includes('//')) {
-                    return this.elementByXPathOrNull(selector, timeout);
+                    return this.elementByXPathOrNull(selector);
                 } else {
-                    return this.elementByCssSelectorOrNull(selector, timeout);
+                    return this.elementByCssSelectorOrNull(selector);
                 }
             }
         );
@@ -245,13 +250,42 @@ const SuiteManagerClass = class {
         webDriverInstance.addPromiseChainMethod(
             'swipe',
             function (opts) {
-                var action = new webDriverInstance.TouchAction();
+                const action = new webDriverInstance.TouchAction();
                 action
                     .press({x: opts.startX, y: opts.startY})
                     .wait(opts.duration)
                     .moveTo({x: opts.endX, y: opts.endY})
                     .release();
-                return this.performTouchAction(action);
+
+                if (Framework.CONTEXT === Framework.CONTEXTS.WEBVIEW) {
+                    return this
+                        .context(Framework.CONTEXTS.NATIVE)
+                        .performTouchAction(action)
+                        .context(Framework.CONTEXTS.WEBVIEW);
+                } else {
+                    return this
+                        .performTouchAction(action);
+                }
+            }
+        );
+
+        webDriverInstance.addPromiseChainMethod(
+            'goToWebviewContext',
+            function() {
+                Framework.CONTEXT = Framework.CONTEXTS.WEBVIEW;
+
+                return this
+                    .context(Framework.CONTEXTS.WEBVIEW);
+            }
+        );
+
+        webDriverInstance.addPromiseChainMethod(
+            'goToNativeContext',
+            function() {
+                Framework.CONTEXT = Framework.CONTEXTS.NATIVE;
+
+                return this
+                    .context(Framework.CONTEXTS.NATIVE);
             }
         );
     }
@@ -313,6 +347,9 @@ const SuiteManagerClass = class {
         global.isElement = driver.isElement.bind(driver);
         global.handleKeyboard = driver.handleKeyboard.bind(driver);
         global.sleep = driver.sleep.bind(driver);
+        global.swipe = driver.swipe.bind(driver);
+        global.goToNativeContext = driver.goToNativeContext.bind(driver);
+        global.goToWebviewContext = driver.goToWebviewContext.bind(driver);
     }
 
     async initAfter () {
@@ -343,7 +380,7 @@ const SuiteManagerClass = class {
                 }
             });
             its();
-            afterEach(function () {
+            afterEach(function (done) {
                 CommunicationManager.updateItStatus({
                     parent: this.currentTest.parent.title,
                     title: this.currentTest.title,
@@ -355,7 +392,11 @@ const SuiteManagerClass = class {
                 if (this.currentTest.state === 'failed') {
                     shelljs.exec(`adb -s ${this.deviceId} shell input keyevent KEYCODE_WAKEUP`, {silent: true});
                     console.log('Test failed, taking screenshot...');
-                    global.driver.screenshot(`${this.currentTest.title}-FAILED`);
+                    global.driver.screenshot(`${this.currentTest.title}-FAILED`).then(() => {
+                        done();
+                    });
+                } else {
+                    done();
                 }
             });
             after(SuiteManager.initAfter.bind(SuiteManager));

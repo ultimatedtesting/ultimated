@@ -9,9 +9,13 @@ const ParallelExecutionManager = class {
     constructor () {
         this.beginDateTime = moment().format('YYYY-MM-DD_HH-mm');
         this.activeDevicesList = {};
+
+        this.allDone = null;
     }
 
-	init () {
+	init (afterAllCallback) {
+        this.afterAllCallback = afterAllCallback;
+
 		this.resetAppium();
 		this.prepareFolders();
 		this.startTestsOnAllDevices();
@@ -49,6 +53,10 @@ const ParallelExecutionManager = class {
         }
     }
 
+    generateFreePort() {
+
+    }
+
     getAndroidDevicesList () {
 		shelljs.exec(`adb devices`, {silent:true});
 		
@@ -66,7 +74,7 @@ const ParallelExecutionManager = class {
     }
 	
     runAppium (port, deviceId) {
-        shelljs.exec(`${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/node ${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/forever start -o logs/${this.beginDateTime}-${port} -a --sourceDir "${CommonUtils.getMainPath()}" --tmp "${CommonUtils.getMainPath()}/reports/${this.beginDateTime}/${deviceId}" --uid "${this.beginDateTime}-${port}" "/node_modules/appium/build/lib/main.js" --port ${port} -bp ${port+100} --chromedriver-port ${port+200} --webkit-debug-proxy-port ${port+300}`, {silent:true});
+        shelljs.exec(`${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/node ${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/forever start -o logs/${this.beginDateTime}-${port} -a --sourceDir "${CommonUtils.getMainPath()}" --tmp "${CommonUtils.getMainPath()}/reports/${this.beginDateTime}/${deviceId}" --uid "${deviceId}-port${port}" "/node_modules/appium/build/lib/main.js" --port ${port} -bp ${port+100} --chromedriver-port ${port+200} --webkit-debug-proxy-port ${port+300}`, {silent:true});
     }
 
 	runTest (deviceId, port, platform, resolve) {
@@ -74,22 +82,29 @@ const ParallelExecutionManager = class {
 
 		request(`http://127.0.0.1:${port}`, (error, response, body) => {
 			if (!error && response.statusCode === 404) {
-                const shelljsObject = shelljs.exec(`env DEVICE=${deviceId} PORT=${port} PLATFORM=${platform} DATETIME=${this.beginDateTime} ${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/node ${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/mocha -R good-mocha-html-reporter -p ./reports/${this.beginDateTime}/${deviceId}.html --timeout 300000 ${process.env.JENKINS ? '--bail' : ''} ${CONFIG.ULTIMATED_CORE_ABSOLUTE_PATH}/${global.PROJECT_VERSION}/framework/testsEntryPoint.js`, {silent:false}, (code) => {
+			    console.log('appium ok');
+                const shelljsObject = shelljs.exec(`env DEVICE=${deviceId} PORT=${port} PLATFORM=${platform} DATETIME=${this.beginDateTime} ${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/node ${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/mocha -R good-mocha-html-reporter -p ./reports/${this.beginDateTime}/${deviceId}.html --timeout 300000 ${Ultimated.FLAGS.BAIL ? '--bail' : ''} ${CONFIG.ULTIMATED_CORE_ABSOLUTE_PATH}/${global.PROJECT_VERSION}/framework/testsEntryPoint.js`, {silent:false}, (code) => {
                     console.log(`Test (device: ${deviceId}, port: ${port}) has just finished`);
-                    shelljs.exec(`${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/forever stop ${this.beginDateTime}-${port}`, {silent:true});
+                    shelljs.exec(`${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/forever stop ${deviceId}-port${port}`, {silent:true});
                     CommunicationManager.updateTestStatus(deviceId);
 
                     delete this.activeDevicesList[deviceId];
                     console.log('devices left: ', Object.keys(this.activeDevicesList).length);
 
-                    if (process.env.JENKINS && code !== 0) {
+                    if (Ultimated.FLAGS.BAIL && code !== 0) {
                         console.log('one of the tests failed, killing...');
+                        if (this.afterAllCallback) {
+                            this.afterAllCallback(this.beginDateTime, deviceId, port);
+                        }
                          setTimeout(() => {
                             console.log(`killed with code ${code}!`);
                             process.exit(code);
                         }, 3000);
                     } else if (Object.keys(this.activeDevicesList).length === 0) {
                         console.log('killing...');
+                        if (this.afterAllCallback) {
+                            this.afterAllCallback(this.beginDateTime, deviceId, port);
+                        }
                         setTimeout(() => {
                             console.log('killed!');
                             process.exit(0);

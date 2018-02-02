@@ -101,17 +101,22 @@ const DependenciesManager = class {
         const files = fs.readdirSync(dir);
 
         files.forEach(function(fileName) {
-            let path = `${dir}/${fileName}`;
+            if (fileName !== '.DS_Store') {
+                let path = `${dir}/${fileName}`;
 
-            if (fs.statSync(dir + '/' + fileName).isDirectory()) {
-                fileList = this.getAllFilesFromDirectory(path, fileList);
+                if (fs.statSync(dir + '/' + fileName).isDirectory()) {
+                    fileList = this.getAllFilesFromDirectory(path, fileList);
+                }
+                else {
+                    fileName = fileName.replace('.js', '');
+                    path = path.replace('.js', '');
+                    fileList.push({fileName, path});
+                }
             }
-            else {
-                fileName = fileName.replace('.js', '');
-                path = path.replace('.js', '');
-                fileList.push({fileName, path});
-            }
+
+
         }.bind(this));
+
         return fileList;
     }
 
