@@ -165,7 +165,7 @@ const ParallelExecutionManager = class {
 
         return devices;
     }
-    //
+
     // async startTestsOnIOSSimulators () {
     //     const iOSSimulatorsList = this.getIOSSimulatorsList();
     //
@@ -179,7 +179,7 @@ const ParallelExecutionManager = class {
     //         await this.runTestSync(device, port, 'iOS');
     //     }
     // }
-
+    //
     // getIOSSimulatorsList () {
     //     let response = shelljs.exec(`instruments -s devices`, {silent:true});
     //     let devices = [];

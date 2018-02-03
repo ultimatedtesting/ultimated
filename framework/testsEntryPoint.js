@@ -11,4 +11,9 @@ global.PROJECT_CONFIG = require(global.PROJECT_RELATIVE_PATH + '.ultimated/confi
 global.SuiteManager = require('./suiteManager').default;
 global.STORAGE = require(global.PROJECT_RELATIVE_PATH + '.ultimated/tests/storage').default;
 
+var chai = require('chai');
+global.assert = chai.assert;
+global.expect = chai.expect;
+chai.should();
+
 require(global.PROJECT_RELATIVE_PATH + '.ultimated/tests/tests');
