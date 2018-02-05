@@ -37,6 +37,17 @@ ultimated create my_tests_project_name
 cd my_tests_project_name
 ultimated
 ```
+
+## Developing
+
+**How to set up dev environment**
+
+1. use the following command:
+
+`cd ~/.ultimated/packages/ultimated-core && git clone https://github.com/ultimatedtesting/ultimated.git && rm -rf latest && ln -s ultimated latest && cd ultimated && ln -s ~/.ultimated/packages/node-suites/4/lib/node_modules node_modules`
+
+2. edit the code located in ~/.ultimated/packages/ultimated-core/ultimated
+
 ## Uninstalling
 ```
 rm -rf ~/.ultimated
