@@ -393,7 +393,6 @@ const SuiteManagerClass = class {
             before(SuiteManager.initBefore.bind(SuiteManager, filename));
             beforeEach(function() {
                 if (Framework.PLATFORM === Framework.ANDROID) {
-                    console.log(`#debug beforeEach waking aup -> adb -s ${Framework.DEVICE_ID} shell input keyevent 224`);
                     // shelljs.exec(`adb -s ${this.deviceId} shell input keyevent KEYCODE_WAKEUP`, {silent: true});
                     shelljs.exec(`adb -s ${Framework.DEVICE_ID} shell input keyevent 224`, {silent: true});
 
