@@ -8,6 +8,8 @@ import FacebookLogin from './facebookLogin';
 import NativeCalendar from './nativeCalendar';
 import moment from 'moment';
 import shelljs from 'shelljs';
+import fs from 'fs';
+import commonUtils from './commonUtils';
 
 const SuiteManagerClass = class {
     constructor () {
@@ -37,7 +39,7 @@ const SuiteManagerClass = class {
             fullReset: false,
             automationName: process.env.PLATFORM === 'Android' ? "Appium" : "XCUITest",
             nativeWebScreenshot: false,
-            androidInstallTimeout: 240000
+            androidInstallTimeout: 240000,
             // unicodeKeyboard: true,
             // resetKeyboard: true
         };
@@ -52,11 +54,13 @@ const SuiteManagerClass = class {
 
         if (process.env.PLATFORM === Framework.ANDROID) {
             this.capsConfig.nativeWebScreenshot = true;
+            this.capsConfig.skipUnlock = true;
         }
 
         Framework.IOS = 'iOS';
         Framework.ANDROID = 'Android';
         Framework.PLATFORM = process.env.PLATFORM;
+        Framework.DEVICE_ID = this.deviceId;
     }
 
     async initBefore (filename) {
@@ -72,10 +76,10 @@ const SuiteManagerClass = class {
             this.enhanceDriver(webDriverInstance);
             this.enhanceFramework(Framework);
             const driver = webDriverInstance.promiseChainRemote(this.serverConfig);
-            console.log('Framework ready, initializing suite...');
+            console.log('Framework ready, installing apk on the device...');
             await driver.init(this.capsConfig);
             await driver.setImplicitWaitTimeout(CONFIG.MAXIMUM_WAIT_TIMEOUT_MS);
-            console.log('App installed on the device, changing to webview...');
+            console.log('App installed on the device, initializing suite...');
             const contexts = await driver.contexts();
             Framework.CONTEXT = contexts[contexts.length - 1];
             Framework.CONTEXTS = {
@@ -95,6 +99,8 @@ const SuiteManagerClass = class {
             this.exposeDriver(driver);
             this.exposeFramework();
             this.exposeUltimatedMethods();
+
+            console.log('Framework ready. ');
 
             resolve();
         });
@@ -296,19 +302,41 @@ const SuiteManagerClass = class {
             await driver.saveScreenshot(`reports/${this.beginDateTime}/${this.deviceId}/${this.moduleName}-${path}.png`);
         };
 
-        const comparer = screenshotComparer({
-            Q: driver.Q,
-            tolerance: CONFIG.SCREENSHOT_TOLERANCE,
-            saveDiffImagePath: 'screenshot-reference',
-            highlightColor: 'magenta',
-            highlightStyle: 'XOR'
-        });
 
-        global.driver.compare = async (path) => {
-            return await comparer.compareScreenshot(
-                `screenshot-reference/${this.deviceId}/${this.moduleName}-${path}.png`,
-                `reports/${this.beginDateTime}/${this.deviceId}/${this.moduleName}-${path}.png`
-            );
+
+        global.driver.compare = async (path, tolerance = CONFIG.SCREENSHOT_TOLERANCE) => {
+            const comparer = screenshotComparer({
+                Q: driver.Q,
+                tolerance: tolerance,
+                saveDiffImagePath: `screenshot-reference/`,
+                highlightColor: 'magenta',
+                highlightStyle: 'XOR'
+            });
+
+            const mainPath = commonUtils.getMainPath();
+            const referenceImagePath = `screenshot-reference/${this.moduleName}/${path}/${this.deviceId}.png`;
+            const screenshotPath = `reports/${this.beginDateTime}/${this.deviceId}/${this.moduleName}-${path}.png`;
+
+            await global.driver.screenshot(path);
+
+            if (fs.existsSync(`${referenceImagePath}`)) {
+                await comparer.compareScreenshot(
+                    referenceImagePath,
+                    screenshotPath
+                );
+
+                shelljs.exec(`rm -rf ${screenshotPath}`);
+            } else {
+                if (!fs.existsSync(`screenshot-reference/${this.moduleName}`)) {
+                    shelljs.exec(`mkdir screenshot-reference/${this.moduleName}`);
+                }
+
+                if (!fs.existsSync(`screenshot-reference/${this.moduleName}/${path}`)) {
+                    shelljs.exec(`mkdir screenshot-reference/${this.moduleName}/${path}`);
+                }
+
+                shelljs.exec(`mv ${screenshotPath} ${referenceImagePath}`);
+            }
         };
     }
 
@@ -350,6 +378,7 @@ const SuiteManagerClass = class {
         global.swipe = driver.swipe.bind(driver);
         global.goToNativeContext = driver.goToNativeContext.bind(driver);
         global.goToWebviewContext = driver.goToWebviewContext.bind(driver);
+        global.visualTest = driver.compare.bind(driver);
     }
 
     async initAfter () {
@@ -359,12 +388,14 @@ const SuiteManagerClass = class {
         });
     }
 
-    executeTestSuite (its) {
+    executeTestSuite (its, filename) {
         return function () {
-            before(SuiteManager.initBefore.bind(SuiteManager, __filename));
+            before(SuiteManager.initBefore.bind(SuiteManager, filename));
             beforeEach(function() {
                 if (Framework.PLATFORM === Framework.ANDROID) {
-                    shelljs.exec(`adb -s ${this.deviceId} shell input keyevent KEYCODE_WAKEUP`, {silent: true});
+                    console.log(`#debug beforeEach waking aup -> adb -s ${Framework.DEVICE_ID} shell input keyevent 224`);
+                    // shelljs.exec(`adb -s ${this.deviceId} shell input keyevent KEYCODE_WAKEUP`, {silent: true});
+                    shelljs.exec(`adb -s ${Framework.DEVICE_ID} shell input keyevent 224`, {silent: true});
 
                     // TODO use this info to write screen turn on/off script for android
                     // adb shell input touchscreen swipe 930 880 930 380 //Swipe UP
@@ -378,7 +409,7 @@ const SuiteManagerClass = class {
                     // adb shell dumpsys display
                     // In the output search for mScreenState=ON/OFF
                 }
-            });
+            }.bind(this));
             its();
             afterEach(function (done) {
                 CommunicationManager.updateItStatus({
@@ -390,9 +421,10 @@ const SuiteManagerClass = class {
                 });
 
                 if (this.currentTest.state === 'failed') {
-                    shelljs.exec(`adb -s ${this.deviceId} shell input keyevent KEYCODE_WAKEUP`, {silent: true});
+                    // shelljs.exec(`adb -s ${this.deviceId} shell input keyevent KEYCODE_WAKEUP`, {silent: true});
+                    shelljs.exec(`adb -s ${Framework.DEVICE_ID} shell input keyevent 224`, {silent: true});
                     console.log('Test failed, taking screenshot...');
-                    global.driver.screenshot(`${this.currentTest.title}-FAILED`).then(() => {
+                    global.driver.screenshot(`FAILED-${this.currentTest.title}`).then(() => {
                         done();
                     });
                 } else {

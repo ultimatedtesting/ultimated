@@ -27,6 +27,7 @@ const ParallelExecutionManager = class {
 
 	prepareFolders () {
         shelljs.exec(`mkdir reports`, {silent:true});
+        shelljs.exec(`mkdir screenshot-reference`, {silent:true});
         shelljs.exec(`mkdir reports/${this.beginDateTime}`, {silent:true});
         shelljs.exec(`mkdir logs`, {silent:true});
     }
@@ -82,7 +83,6 @@ const ParallelExecutionManager = class {
 
 		request(`http://127.0.0.1:${port}`, (error, response, body) => {
 			if (!error && response.statusCode === 404) {
-			    console.log('appium ok');
                 const shelljsObject = shelljs.exec(`env DEVICE=${deviceId} PORT=${port} PLATFORM=${platform} DATETIME=${this.beginDateTime} ${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/node ${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/mocha -R good-mocha-html-reporter -p ./reports/${this.beginDateTime}/${deviceId}.html --timeout 300000 ${Ultimated.FLAGS.BAIL ? '--bail' : ''} ${CONFIG.ULTIMATED_CORE_ABSOLUTE_PATH}/${global.PROJECT_VERSION}/framework/testsEntryPoint.js`, {silent:false}, (code) => {
                     console.log(`Test (device: ${deviceId}, port: ${port}) has just finished`);
                     shelljs.exec(`${CONFIG.NODE_SUITES_ABSOLUTE_PATH}/${global.PROJECT_NODE_SUITE}/bin/forever stop ${deviceId}-port${port}`, {silent:true});
