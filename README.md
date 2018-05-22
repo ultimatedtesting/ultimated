@@ -1,1 +1,1 @@
-Deprecated! Please use [`this repo`](https://github.com/gczudowski/ultimated)
+Repo moved to [`https://github.com/gczudowski/ultimated`](https://github.com/gczudowski/ultimated)
